@@ -1,0 +1,2 @@
+# Add shared Python dependencies here once the team agrees on versions.
+# Example format: package==version
