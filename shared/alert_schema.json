@@ -1,0 +1,14 @@
+{
+  "agent": "Delivery Agent",
+  "stage": "Delivery",
+  "timestamp": "YYYY-MM-DDTHH:MM:SSZ",
+  "severity": "Low|Medium|High|Critical",
+  "mitre_technique": "TXXXX",
+  "mitre_name": "Technique name",
+  "description": "Short description of the detected activity",
+  "evidence": [
+    "Evidence item 1"
+  ],
+  "confidence": 0,
+  "recommended_action": "Recommended SOC analyst action"
+}
