@@ -16,3 +16,7 @@ venv/
 # Logs and generated data
 *.log
 logs/
+
+# Allows logs in tests fixtures
+!tests/fixtures/*.log 
+
