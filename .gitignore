@@ -16,3 +16,4 @@ venv/
 # Logs and generated data
 *.log
 logs/
+outputs/
