@@ -1,60 +1,51 @@
 from agents.delivery.delivery_agent import DeliveryAgent
-
-# ==========================================================
-# AAKCD - Main Integration File
-# Each team member's agent will eventually be imported here.
-#
-# Agents:
-# - Reconnaissance Agent
-# - Delivery Agent
-# - Exploitation Agent
-# - Installation Agent
-# - Command & Control Agent
-# ==========================================================
+from shared.json_output import save_agent_output
 
 
-def main():
+def run_delivery_agent():
 
-    # ------------------------------------------------------
-    # DELIVERY AGENT - Francesco
-    # ------------------------------------------------------
+    print()
+    print("=" * 55)
+    print("AAKCD DELIVERY AGENT")
+    print("REAL FILE SCANNING TEST")
+    print("=" * 55)
 
-    delivery_event = {
-        "source_ip": "192.168.1.50",
-        "attachment": "invoice.exe"
-    }
-
+    # Create Delivery Agent
     delivery_agent = DeliveryAgent()
-    delivery_alert = delivery_agent.analyse_event(delivery_event)
 
-    if delivery_alert:
-        print(delivery_alert.to_dict())
-    else:
-        print("No suspicious delivery activity detected.")
+    # Folder containing the test files
+    test_folder = "test_samples"
 
-    # ------------------------------------------------------
-    # RECONNAISSANCE AGENT
-    # Team member integration goes here
-    # ------------------------------------------------------
+    # Scan every file in the folder
+    alerts = delivery_agent.scan_directory(
+        test_folder
+    )
 
+    # Save detected alerts to JSON
+    output_file = save_agent_output(
+        alerts,
+        "delivery_file_scan.json"
+    )
 
-    # ------------------------------------------------------
-    # EXPLOITATION AGENT
-    # Team member integration goes here
-    # ------------------------------------------------------
+    print()
+    print("=" * 55)
+    print("DELIVERY AGENT COMPLETE")
+    print("=" * 55)
 
+    print(
+        f"Files scanned from: {test_folder}"
+    )
 
-    # ------------------------------------------------------
-    # INSTALLATION AGENT
-    # Team member integration goes here
-    # ------------------------------------------------------
+    print(
+        f"Total alerts detected: {len(alerts)}"
+    )
 
+    print(
+        f"JSON results saved to: {output_file}"
+    )
 
-    # ------------------------------------------------------
-    # COMMAND & CONTROL AGENT
-    # Team member integration goes here
-    # ------------------------------------------------------
+    print("=" * 55)
 
 
 if __name__ == "__main__":
-    main()
+    run_delivery_agent()
