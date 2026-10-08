@@ -76,3 +76,10 @@ AI tests mock Ollama and need no model or network. To run just those tests witho
 installing pytest: `python3 -m unittest discover -s tests -p 'test_ollama_analysis.py'`.
 For a real-model smoke test, run the sample scan with AI enabled and inspect the
 labelled AI findings. Model wording and the number of AI findings may vary.
+
+## Evaluate detection quality
+
+Run `python3 -m evaluation.run_delivery` for a rules baseline, or
+`python3 -m evaluation.run_delivery --with-ai` for a local AI comparison.
+See [the evaluation guide](../../evaluation/README.md) for the 40 labelled
+synthetic cases, metrics, limitations and saved reports.
