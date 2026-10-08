@@ -1,8 +1,0 @@
-<!-- Install on the machine running the recon agent (the Wazuh AGENT on the victim VM):
-     add inside <ossec_config> in /var/ossec/etc/ossec.conf
-     then: sudo systemctl restart wazuh-agent
-     Run the recon agent with:  --out /opt/aakcd/recon_alerts.jsonl -->
-<localfile>
-  <log_format>json</log_format>
-  <location>/opt/aakcd/recon_alerts.jsonl</location>
-</localfile>
