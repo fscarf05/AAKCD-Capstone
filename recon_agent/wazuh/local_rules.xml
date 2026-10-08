@@ -1,0 +1,47 @@
+<!-- AAKCD Recon Agent rules.
+     Install on the Wazuh MANAGER: append to /var/ossec/etc/rules/local_rules.xml
+     then: sudo systemctl restart wazuh-manager
+     Custom rule IDs must be 100000-120000; 1001xx is reserved here for the Recon Agent.
+     Field names match the shared AAKCD alert schema (alert_schema.py / alert_schema.json). -->
+<group name="aakcd,recon,">
+
+  <!-- Base: any line written by the recon agent (level 0 = matched, not alerted on its own) -->
+  <rule id="100100" level="0">
+    <decoded_as>json</decoded_as>
+    <field name="agent">^recon$</field>
+    <description>AAKCD Recon Agent event</description>
+  </rule>
+
+  <!-- Vertical scan (one host, many ports) -->
+  <rule id="100101" level="10">
+    <if_sid>100100</if_sid>
+    <field name="mitre_technique_id">^T1595$</field>
+    <field name="severity">^MEDIUM$</field>
+    <description>AAKCD Recon: port scan from $(source_ip) - $(description)</description>
+    <mitre><id>T1595</id></mitre>
+  </rule>
+  <rule id="100102" level="12">
+    <if_sid>100100</if_sid>
+    <field name="mitre_technique_id">^T1595$</field>
+    <field name="severity">^HIGH$</field>
+    <description>AAKCD Recon: aggressive port scan from $(source_ip) - $(description)</description>
+    <mitre><id>T1595</id></mitre>
+  </rule>
+
+  <!-- Horizontal sweep (many hosts) -->
+  <rule id="100103" level="10">
+    <if_sid>100100</if_sid>
+    <field name="mitre_technique_id">^T1595.001$</field>
+    <field name="severity">^MEDIUM$</field>
+    <description>AAKCD Recon: network sweep from $(source_ip) - $(description)</description>
+    <mitre><id>T1595.001</id></mitre>
+  </rule>
+  <rule id="100104" level="12">
+    <if_sid>100100</if_sid>
+    <field name="mitre_technique_id">^T1595.001$</field>
+    <field name="severity">^HIGH$</field>
+    <description>AAKCD Recon: aggressive network sweep from $(source_ip) - $(description)</description>
+    <mitre><id>T1595.001</id></mitre>
+  </rule>
+
+</group>
