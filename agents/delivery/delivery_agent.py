@@ -1,7 +1,9 @@
 from pathlib import Path
+import os
 import re
 
 from shared.alert_schema import Alert
+from agents.delivery.ollama_analysis import OllamaAnalysis
 
 
 class DeliveryAgent:
@@ -99,7 +101,23 @@ class DeliveryAgent:
     # MAIN EVENT ANALYSIS
     # =========================================================
 
+    def __init__(self, ai_enabled=None):
+        if ai_enabled is None:
+            ai_enabled = os.getenv("DELIVERY_AI_ENABLED", "").lower() in {
+                "1", "true", "yes"
+            }
+        self.ai_analysis = OllamaAnalysis() if ai_enabled else None
+
     def analyse_event(self, event):
+        """Keep rule alerts unchanged and optionally append a local AI finding."""
+        alerts = self._analyse_rules(event)
+        if self.ai_analysis is not None:
+            ai_alert = self.ai_analysis.analyse(event)
+            if ai_alert is not None:
+                alerts.append(ai_alert)
+        return alerts
+
+    def _analyse_rules(self, event):
         """
         Analyse an event supplied to the Delivery Agent.
 
