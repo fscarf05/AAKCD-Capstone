@@ -34,9 +34,11 @@ class EvaluationTests(unittest.TestCase):
     def test_failure_is_not_valid_ai_comparison(self):
         class FailedAgent:
             def __init__(self, ai_enabled):
-                self.ai_analysis = SimpleNamespace(available=True) if ai_enabled else None
+                self.ai_analysis = SimpleNamespace(available=True, last_status="not_run", last_error=None, last_finding=None) if ai_enabled else None
             def analyse_event(self, event):
                 if self.ai_analysis:
+                    self.ai_analysis.last_status = 'failed' if self.ai_analysis.available else 'skipped_after_failure'
+                    self.ai_analysis.last_error = 'connection_error'
                     self.ai_analysis.available = False
                 return []
         result = evaluate(load_cases(DEFAULT_DATASET)[:2], True, FailedAgent)
@@ -47,12 +49,30 @@ class EvaluationTests(unittest.TestCase):
     def test_successful_benign_verdict_counts_as_completed(self):
         class BenignAgent:
             def __init__(self, ai_enabled):
-                self.ai_analysis = SimpleNamespace(available=True) if ai_enabled else None
+                self.ai_analysis = SimpleNamespace(available=True, last_status="not_run", last_error=None, last_finding=None) if ai_enabled else None
             def analyse_event(self, event):
+                if self.ai_analysis:
+                    self.ai_analysis.last_status = 'completed'
                 return []
         result = evaluate(load_cases(DEFAULT_DATASET)[:2], True, BenignAgent)
         self.assertTrue(result['comparison']['valid_full_ai_comparison'])
         self.assertEqual(result['runs']['rules_plus_ai']['ai_status_counts'], {'completed': 2})
+
+    def test_recovered_response_failure_still_invalidates_comparison(self):
+        with patch('http.client.HTTPConnection') as factory:
+            response = factory.return_value.getresponse.return_value
+            response.status = 200
+            response.read.side_effect = [b'not json', json.dumps({
+                'done': True, 'response': json.dumps({
+                    'suspicious': False, 'reason': 'Routine message', 'category': 'none'})
+            }).encode()]
+            report = evaluate(load_cases(DEFAULT_DATASET)[25:27], True)
+        self.assertFalse(report['comparison']['valid_full_ai_comparison'])
+        rows = report['runs']['rules_plus_ai']['cases']
+        self.assertEqual([r['ai_status'] for r in rows], ['failed', 'completed'])
+        self.assertEqual(rows[0]['ai_error'], 'malformed_json_or_fields')
+        self.assertEqual(rows[1]['ai_finding']['category'], 'none')
+        self.assertIsNone(rows[1]['ai_error'])
 
     def test_invalid_labels_and_duplicate_ids(self):
         for mutate in [lambda c: c[0].update(suspicious='false'),

@@ -35,10 +35,16 @@ they do not measure cross-agent response or end-to-end containment time. Record
 for reproducibility. Repeat warmed runs to assess variability.
 
 Rules mode explicitly disables AI regardless of environment variables. The AI
-comparison uses the real DeliveryAgent fallback: after a failure, subsequent cases
-use rules only. Such runs still save diagnostic results but exit with code 2 and
+comparison uses the real DeliveryAgent fallback: a service failure disables AI,
+while an isolated malformed answer allows the next case to try AI. Three consecutive
+invalid answers disable AI. Each failed case remains marked failed, even if later
+cases succeed. Such runs still save diagnostic results but exit with code 2 and
 mark `valid_full_ai_comparison` false. Do not present them as completed AI results.
 A completed benign AI verdict is counted as completed even when no alert is added.
+The JSON also records `ai_error` codes and `ai_finding` (including benign verdicts),
+so missed threats can be distinguished from failed requests. The Markdown summary
+identifies failed case IDs and error codes. Treat saved AI explanations as potentially
+sensitive if you replace these synthetic examples with private data.
 
 ## Dataset scope
 

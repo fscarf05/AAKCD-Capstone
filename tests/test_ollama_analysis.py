@@ -127,6 +127,58 @@ class TestOllamaAnalysis(unittest.TestCase):
                 os.chdir(previous)
             self.assertEqual(set(record), set(alerts[0].to_dict()) | {'timestamp'})
 
+    def test_benign_none_category_regression(self):
+        self.reply(suspicious=False, category='none')
+        agent = DeliveryAgent(ai_enabled=True)
+        self.assertEqual(agent.analyse_event({'body': 'Lunch is at noon.'}), [])
+        self.assertEqual(agent.ai_analysis.last_status, 'completed')
+        self.assertTrue(agent.ai_analysis.available)
+        self.assertFalse(agent.ai_analysis.last_finding['suspicious'])
+        self.assertIsNone(agent.ai_analysis.last_error)
+
+    def test_structured_schema_requested(self):
+        DeliveryAgent(ai_enabled=True).analyse_event({'body': 'hello'})
+        payload = json.loads(self.connection.request.call_args.args[2])
+        self.assertEqual(payload['format']['properties']['suspicious']['type'], 'boolean')
+        self.assertIn('none', payload['format']['properties']['category']['enum'])
+
+    def test_invalid_answer_recovers_next_case_and_resets_error(self):
+        self.response.read.return_value = b'not json'
+        agent = DeliveryAgent(ai_enabled=True)
+        with self.assertLogs('agents.delivery.ollama_analysis', level='WARNING') as logs:
+            agent.analyse_event({'body': 'PRIVATE TEST CONTENT'})
+        self.assertNotIn('PRIVATE TEST CONTENT', str(logs.output))
+        self.assertEqual(agent.ai_analysis.last_status, 'failed')
+        self.assertEqual(agent.ai_analysis.last_error, 'malformed_json_or_fields')
+        self.assertTrue(agent.ai_analysis.available)
+        self.reply(False, 'none')
+        agent.analyse_event({'body': 'Hello'})
+        self.assertEqual(agent.ai_analysis.last_status, 'completed')
+        self.assertIsNone(agent.ai_analysis.last_error)
+        self.assertEqual(agent.ai_analysis.invalid_responses, 0)
+
+    def test_repeated_invalid_answers_disable_ai(self):
+        self.response.read.return_value = b'not json'
+        agent = DeliveryAgent(ai_enabled=True)
+        for _ in range(3):
+            agent.analyse_event({'body': 'Hello'})
+        self.assertFalse(agent.ai_analysis.available)
+        agent.analyse_event({'body': 'Hello'})
+        self.assertEqual(agent.ai_analysis.last_status, 'skipped_after_failure')
+        self.assertEqual(self.connection.request.call_count, 3)
+
+    def test_suspicious_none_and_truncation_are_failures(self):
+        self.reply(True, 'none')
+        agent = DeliveryAgent(ai_enabled=True)
+        self.assertEqual(agent.analyse_event({'body': 'Hello'}), [])
+        self.assertEqual(agent.ai_analysis.last_error, 'suspicious_without_category')
+        self.reply()
+        envelope = json.loads(self.response.read.return_value)
+        envelope['done_reason'] = 'length'
+        self.response.read.return_value = json.dumps(envelope).encode()
+        agent.analyse_event({'body': 'Hello'})
+        self.assertEqual(agent.ai_analysis.last_error, 'output_truncated')
+
     def test_empty_event_does_not_contact_ollama(self):
         self.assertEqual(DeliveryAgent(ai_enabled=True).analyse_event({}), [])
         self.factory.assert_not_called()

@@ -65,24 +65,18 @@ def evaluate(cases, include_ai=False, agent_factory=DeliveryAgent):
         agent = agent_factory(ai_enabled=mode == 'rules_plus_ai')
         rows = []
         for case in cases:
-            before = agent.ai_analysis.available if agent.ai_analysis else False
             start = perf_counter()
             alerts = agent.analyse_event(dict(case['event']))
             elapsed = perf_counter() - start
-            if mode == 'rules':
-                status = 'disabled'
-            elif not before:
-                status = 'skipped_after_failure'
-            elif not agent.ai_analysis.available:
-                status = 'failed'
-            else:
-                status = 'completed'
+            status = agent.ai_analysis.last_status if agent.ai_analysis else 'disabled'
             detected = bool(alerts)
             outcome = ('TP' if detected else 'FN') if case['suspicious'] else ('FP' if detected else 'TN')
             rows.append({
                 'id': case['id'], 'category': case['category'],
                 'expected_suspicious': case['suspicious'], 'detected': detected,
                 'outcome': outcome, 'ai_status': status, 'elapsed_seconds': elapsed,
+                'ai_error': agent.ai_analysis.last_error if agent.ai_analysis else None,
+                'ai_finding': agent.ai_analysis.last_finding if agent.ai_analysis else None,
                 'alerts': [alert.to_dict() for alert in alerts],
             })
         runs[mode] = {
@@ -120,6 +114,9 @@ def markdown_report(report):
               'If false, AI was not requested or at least one case used fallback. Do not claim AI improvement from an incomplete run.', '']
     for mode, run in report['runs'].items():
         lines += [f'## {mode}', '', f"AI status: {run['ai_status_counts']}", '']
+        for row in run['cases']:
+            if row['ai_status'] == 'failed':
+                lines.append(f"- AI failure {row['id']}: {row['ai_error']}")
         errors = [r for r in run['cases'] if r['outcome'] in ('FP', 'FN')]
         lines += [f"- {r['id']}: {r['outcome']} ({r['category']})" for r in errors] or ['No classification errors.']
         lines.append('')

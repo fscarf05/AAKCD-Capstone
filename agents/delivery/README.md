@@ -50,8 +50,10 @@ not a calibrated probability; review the explanation before acting. The model ca
 make mistakes or be misled by hostile text. It cannot confirm malware from a name.
 
 AI is disabled by default. A connection error, 30-second socket timeout, missing
-model, HTTP error, oversized response or invalid JSON disables AI for that agent
-instance and logs a generic warning. Rules continue. Restart the program (or create
+model or HTTP error disables AI for that agent instance. Invalid model answers
+fall back for that event, then allow the next event to try AI; three consecutive
+invalid answers disable AI for the instance. Warnings include safe error codes,
+never raw model responses or event content. Rules continue. Restart the program (or create
 a new agent) after fixing Ollama. Warm-up avoids cold-start timeouts; large scans
 are slower with AI enabled. The timeout applies to socket operations, not a hard
 whole-scan deadline. Long input is truncated only for AI; rules still inspect the
