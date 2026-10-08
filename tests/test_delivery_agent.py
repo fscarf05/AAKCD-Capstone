@@ -12,8 +12,8 @@ def test_malicious_executable():
     alerts = agent.analyse_event(event)
 
     assert len(alerts) == 1
-    assert alerts[0].severity == "high"
-    assert alerts[0].kill_chain_stage == "Delivery"
+    assert alerts[0].severity == "HIGH"
+    assert alerts[0].stage == "delivery"
 
 
 def test_safe_pdf():
@@ -40,8 +40,8 @@ def test_macro_document():
     alerts = agent.analyse_event(event)
 
     assert len(alerts) == 1
-    assert alerts[0].severity == "high"
-    assert "Macro-enabled document" in alerts[0].activity
+    assert alerts[0].severity == "HIGH"
+    assert "Macro-enabled document" in alerts[0].description
 
 
 def test_double_extension():
@@ -55,8 +55,8 @@ def test_double_extension():
     alerts = agent.analyse_event(event)
 
     assert len(alerts) == 1
-    assert alerts[0].severity == "critical"
-    assert "disguised malicious attachment" in alerts[0].activity
+    assert alerts[0].severity == "CRITICAL"
+    assert "disguised malicious attachment" in alerts[0].description
 
 
 def test_phishing_email():
@@ -71,8 +71,8 @@ def test_phishing_email():
     alerts = agent.analyse_event(event)
 
     assert len(alerts) == 1
-    assert alerts[0].severity == "medium"
-    assert alerts[0].mitre_technique == "T1566 - Phishing"
+    assert alerts[0].severity == "MEDIUM"
+    assert alerts[0].mitre_technique_id == "T1566"
 
 
 def test_suspicious_url():
@@ -86,8 +86,8 @@ def test_suspicious_url():
     alerts = agent.analyse_event(event)
 
     assert len(alerts) == 1
-    assert alerts[0].severity == "high"
-    assert alerts[0].mitre_technique == "T1566.002 - Spearphishing Link"
+    assert alerts[0].severity == "HIGH"
+    assert alerts[0].mitre_technique_id == "T1566.002"
 
 
 def test_combined_attack():

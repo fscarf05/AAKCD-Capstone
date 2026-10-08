@@ -4,7 +4,7 @@ import http.client
 import json
 import logging
 
-from shared.alert_schema import Alert
+from agents.delivery.alerts import make_alert
 
 
 logger = logging.getLogger(__name__)
@@ -117,16 +117,18 @@ class OllamaAnalysis:
             self.invalid_responses = 0
             if not finding["suspicious"]:
                 return None
-            return Alert(
-                agent="Delivery Agent",
-                severity="medium",
-                activity="AI-assisted finding (Llama 3.2; review required): "
-                         + " ".join(reason.split()),
-                kill_chain_stage="Delivery",
-                mitre_technique=TECHNIQUES[category],
-                confidence=0.5,
-                source_ip=event.get("source_ip", "Unknown"),
+            alert = make_alert(
+                severity="MEDIUM", confidence="low",
+                description="AI-assisted finding (Llama 3.2; review required): "
+                            + " ".join(reason.split()),
+                technique=TECHNIQUES[category].split(" - ", 1)[0],
+                event=event,
+                evidence={"detector": "local_ai", "model": MODEL,
+                          "category": category},
             )
+            alert.ai_status = "ok"
+            alert.ai_summary = reason
+            return alert
         except TimeoutError:
             self._failed("timeout", disable=True)
             return None

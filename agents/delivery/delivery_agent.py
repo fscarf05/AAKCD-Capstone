@@ -2,7 +2,7 @@ from pathlib import Path
 import os
 import re
 
-from shared.alert_schema import Alert
+from agents.delivery.alerts import make_alert
 from agents.delivery.ollama_analysis import OllamaAnalysis
 
 
@@ -109,10 +109,17 @@ class DeliveryAgent:
         self.ai_analysis = OllamaAnalysis() if ai_enabled else None
 
     def analyse_event(self, event):
-        """Keep rule alerts unchanged and optionally append a local AI finding."""
+        """Preserve rule decisions and enrich them using optional local analysis."""
         alerts = self._analyse_rules(event)
         if self.ai_analysis is not None:
             ai_alert = self.ai_analysis.analyse(event)
+            analysis = self.ai_analysis
+            for alert in alerts:
+                alert.ai_status = "ok" if analysis.last_status == "completed" else "unavailable"
+                if analysis.last_finding is not None:
+                    alert.ai_summary = analysis.last_finding["reason"]
+                elif analysis.last_error:
+                    alert.evidence["ai_error"] = analysis.last_error
             if ai_alert is not None:
                 alerts.append(ai_alert)
         return alerts
@@ -160,10 +167,6 @@ class DeliveryAgent:
             or ""
         ).lower()
 
-        source_ip = event.get(
-            "source_ip",
-            "Unknown"
-        )
 
         # =====================================================
         # 1. DOUBLE-EXTENSION / DISGUISED FILE
@@ -190,19 +193,20 @@ class DeliveryAgent:
                 ):
 
                     alerts.append(
-                        Alert(
-                            agent="Delivery Agent",
-                            severity="critical",
-                            activity=(
+                        make_alert(
+                            severity="CRITICAL",
+                            description=(
                                 "Possible disguised malicious attachment detected: "
                                 f"{attachment}"
                             ),
-                            kill_chain_stage="Delivery",
-                            mitre_technique=(
-                                "T1566.001 - Spearphishing Attachment"
-                            ),
-                            confidence=0.95,
-                            source_ip=source_ip,
+                            technique="T1566.001",
+                            confidence="high",
+                            evidence={
+                                "detector": "disguised_attachment",
+                                "filename": attachment,
+                                "extensions": suffixes,
+                            },
+                            event=event,
                         )
                     )
 
@@ -219,19 +223,20 @@ class DeliveryAgent:
             if attachment.endswith(extension):
 
                 alerts.append(
-                    Alert(
-                        agent="Delivery Agent",
-                        severity="high",
-                        activity=(
+                    make_alert(
+                        severity="HIGH",
+                        description=(
                             "Suspicious attachment detected: "
                             f"{attachment}"
                         ),
-                        kill_chain_stage="Delivery",
-                        mitre_technique=(
-                            "T1566.001 - Spearphishing Attachment"
-                        ),
-                        confidence=0.85,
-                        source_ip=source_ip,
+                        technique="T1566.001",
+                        confidence="high",
+                        evidence={
+                            "detector": "suspicious_attachment",
+                            "filename": attachment,
+                            "extension": extension,
+                        },
+                        event=event,
                     )
                 )
 
@@ -246,19 +251,20 @@ class DeliveryAgent:
             if attachment.endswith(extension):
 
                 alerts.append(
-                    Alert(
-                        agent="Delivery Agent",
-                        severity="high",
-                        activity=(
+                    make_alert(
+                        severity="HIGH",
+                        description=(
                             "Macro-enabled document detected: "
                             f"{attachment}"
                         ),
-                        kill_chain_stage="Delivery",
-                        mitre_technique=(
-                            "T1566.001 - Spearphishing Attachment"
-                        ),
-                        confidence=0.90,
-                        source_ip=source_ip,
+                        technique="T1566.001",
+                        confidence="high",
+                        evidence={
+                            "detector": "macro_document",
+                            "filename": attachment,
+                            "extension": extension,
+                        },
+                        event=event,
                     )
                 )
 
@@ -278,19 +284,19 @@ class DeliveryAgent:
         if detected_keywords:
 
             alerts.append(
-                Alert(
-                    agent="Delivery Agent",
-                    severity="medium",
-                    activity=(
+                make_alert(
+                    severity="MEDIUM",
+                    description=(
                         "Possible phishing message detected. Indicators: "
                         + ", ".join(detected_keywords)
                     ),
-                    kill_chain_stage="Delivery",
-                    mitre_technique=(
-                        "T1566 - Phishing"
-                    ),
-                    confidence=0.75,
-                    source_ip=source_ip,
+                    technique="T1566",
+                    confidence="medium",
+                    evidence={
+                        "detector": "phishing_keywords",
+                        "matched_keywords": detected_keywords,
+                    },
+                    event=event,
                 )
             )
 
@@ -303,18 +309,19 @@ class DeliveryAgent:
             if keyword in url:
 
                 alerts.append(
-                    Alert(
-                        agent="Delivery Agent",
-                        severity="high",
-                        activity=(
+                    make_alert(
+                        severity="HIGH",
+                        description=(
                             f"Suspicious URL detected: {url}"
                         ),
-                        kill_chain_stage="Delivery",
-                        mitre_technique=(
-                            "T1566.002 - Spearphishing Link"
-                        ),
-                        confidence=0.80,
-                        source_ip=source_ip,
+                        technique="T1566.002",
+                        confidence="high",
+                        evidence={
+                            "detector": "url_keyword",
+                            "url": url,
+                            "matched_keyword": keyword,
+                        },
+                        event=event,
                     )
                 )
 
@@ -395,7 +402,7 @@ class DeliveryAgent:
         # -----------------------------------------------------
 
         event = {
-            "source_ip": "Local File Test",
+            "source_file": str(path.resolve()),
             "attachment": path.name,
         }
 

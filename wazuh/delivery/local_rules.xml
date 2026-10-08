@@ -1,0 +1,29 @@
+<!-- Proposed Delivery allocation: 100210-100214. Confirm no team collision first. -->
+<group name="aakcd,delivery,">
+  <rule id="100210" level="0">
+    <decoded_as>json</decoded_as>
+    <field name="agent" type="pcre2">^delivery$</field>
+    <field name="stage" type="pcre2">^delivery$</field>
+    <description>AAKCD Delivery event</description>
+  </rule>
+  <rule id="100211" level="3">
+    <if_sid>100210</if_sid>
+    <field name="severity" type="pcre2">^LOW$</field>
+    <description>AAKCD Delivery LOW: $(description)</description>
+  </rule>
+  <rule id="100212" level="7">
+    <if_sid>100210</if_sid>
+    <field name="severity" type="pcre2">^MEDIUM$</field>
+    <description>AAKCD Delivery MEDIUM: $(description)</description>
+  </rule>
+  <rule id="100213" level="10">
+    <if_sid>100210</if_sid>
+    <field name="severity" type="pcre2">^HIGH$</field>
+    <description>AAKCD Delivery HIGH: $(description)</description>
+  </rule>
+  <rule id="100214" level="12">
+    <if_sid>100210</if_sid>
+    <field name="severity" type="pcre2">^CRITICAL$</field>
+    <description>AAKCD Delivery CRITICAL: $(description)</description>
+  </rule>
+</group>

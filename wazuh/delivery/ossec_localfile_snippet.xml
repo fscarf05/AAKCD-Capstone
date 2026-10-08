@@ -1,0 +1,6 @@
+<!-- Inside ossec_config on the machine reading the log.
+     Replace location with the absolute path printed by main.py or the demo. -->
+<localfile>
+  <log_format>json</log_format>
+  <location>/ABSOLUTE/PATH/TO/AAKCD-Capstone/outputs/delivery/alerts.jsonl</location>
+</localfile>

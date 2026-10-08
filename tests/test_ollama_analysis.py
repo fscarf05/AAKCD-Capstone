@@ -10,6 +10,12 @@ from agents.delivery.ollama_analysis import MAX_RESPONSE_BYTES
 from shared.json_output import save_agent_output
 
 
+def rule_fields(alert):
+    return {k: v for k, v in alert.to_dict().items()
+            if k not in {'timestamp', 'ai_status', 'ai_summary', 'ai_recommended_actions'}
+            and k != 'evidence'}
+
+
 class TestOllamaAnalysis(unittest.TestCase):
     def setUp(self):
         self.patcher = patch('agents.delivery.ollama_analysis.http.client.HTTPConnection')
@@ -38,11 +44,11 @@ class TestOllamaAnalysis(unittest.TestCase):
 
     def test_ai_only_finding_and_local_request(self):
         event = {'email_body': 'Please send your credentials to our help desk.',
-                 'source_ip': 'test', 'secret': 'DO NOT SEND'}
+                 'source_ip': '192.0.2.10', 'secret': 'DO NOT SEND'}
         alert = DeliveryAgent(ai_enabled=True).analyse_event(event)[0]
-        self.assertIn('AI-assisted', alert.activity)
-        self.assertEqual(alert.source_ip, 'test')
-        self.assertEqual(alert.confidence, 0.5)
+        self.assertIn('AI-assisted', alert.description)
+        self.assertEqual(alert.source_ip, '192.0.2.10')
+        self.assertEqual(alert.confidence, 'low')
         self.factory.assert_called_once_with('127.0.0.1', 11434, timeout=30)
         args = self.connection.request.call_args.args
         self.assertEqual(args[:2], ('POST', '/api/generate'))
@@ -57,15 +63,15 @@ class TestOllamaAnalysis(unittest.TestCase):
                       {'attachment': 'a.exe', 'body': 'urgent', 'url': 'http://x/login'}]:
             expected = DeliveryAgent(ai_enabled=False).analyse_event(event)
             actual = DeliveryAgent(ai_enabled=True).analyse_event(event)
-            self.assertEqual([a.to_dict() for a in expected],
-                             [a.to_dict() for a in actual[:-1]])
+            self.assertEqual([rule_fields(a) for a in expected],
+                             [rule_fields(a) for a in actual[:-1]])
             self.assertEqual(len(actual), len(expected) + 1)
 
     def test_benign_ai_does_not_remove_rules(self):
         self.reply(suspicious=False)
         event = {'attachment': 'a.exe'}
-        self.assertEqual(DeliveryAgent(ai_enabled=True).analyse_event(event),
-                         DeliveryAgent(ai_enabled=False).analyse_event(event))
+        self.assertEqual([rule_fields(a) for a in DeliveryAgent(ai_enabled=True).analyse_event(event)],
+                         [rule_fields(a) for a in DeliveryAgent(ai_enabled=False).analyse_event(event)])
 
     def test_failures_fall_back_and_stop_retries(self):
         for failure in [ConnectionRefusedError(), TimeoutError(), OSError()]:
@@ -76,7 +82,8 @@ class TestOllamaAnalysis(unittest.TestCase):
                 event = {'attachment': 'a.exe'}
                 expected = DeliveryAgent(ai_enabled=False).analyse_event(event)
                 for _ in range(2):
-                    self.assertEqual(agent.analyse_event(event), expected)
+                    self.assertEqual([rule_fields(a) for a in agent.analyse_event(event)],
+                                     [rule_fields(a) for a in expected])
                 self.connection.request.assert_called_once()
 
     def test_http_errors_and_redirects_are_not_followed(self):
@@ -116,7 +123,7 @@ class TestOllamaAnalysis(unittest.TestCase):
             agent = DeliveryAgent(ai_enabled=True)
             alerts = agent.analyze_file(path)
             self.assertEqual(len(alerts), 1)
-            self.assertEqual(agent.analyze({'text': 'hello'}).agent, 'Delivery Agent')
+            self.assertEqual(agent.analyze({'text': 'hello'}).agent, 'delivery')
             self.assertEqual(len(agent.analyze_event({'text': 'hello'})), 1)
             previous = os.getcwd()
             try:

@@ -1,14 +1,32 @@
 {
-  "agent": "Delivery Agent",
-  "stage": "Delivery",
-  "timestamp": "YYYY-MM-DDTHH:MM:SSZ",
-  "severity": "Low|Medium|High|Critical",
-  "mitre_technique": "TXXXX",
-  "mitre_name": "Technique name",
-  "description": "Short description of the detected activity",
-  "evidence": [
-    "Evidence item 1"
+  "_comment": "AAKCD shared alert schema — proposed by Suraj (Recon Agent), merging shared/alert_schema.json and shared/alert_schema.py. Fields marked optional can be left out or null if an agent doesn't produce them.",
+
+  "agent": "string — e.g. 'recon', 'delivery', 'exploitation', 'installation', 'command_control', 'response_orchestrator'",
+  "stage": "string — the Cyber Kill Chain stage, e.g. 'reconnaissance', 'delivery', 'exploitation'",
+  "timestamp": "string — ISO 8601, e.g. '2026-10-08T07:12:00Z'",
+
+  "severity": "string — one of: LOW | MEDIUM | HIGH | CRITICAL (uppercase, exact spelling)",
+  "confidence": "string — one of: low | medium | high (lowercase, exact spelling)",
+
+  "mitre_tactic_id": "string — e.g. 'TA0043' (optional if not applicable)",
+  "mitre_tactic": "string — e.g. 'Reconnaissance' (optional if not applicable)",
+  "mitre_technique_id": "string — e.g. 'T1595'",
+  "mitre_technique": "string — e.g. 'Active Scanning'",
+
+  "source_ip": "string — attacker/source IP (optional — null if the agent has no IP to report, e.g. a file-based delivery agent)",
+
+  "description": "string — one or two plain-English sentences on what was detected and why it matters",
+
+  "evidence": {
+    "_comment": "object, not a list of strings — each agent defines its own keys here, but keep it structured so individual values (counts, filenames, hashes, etc.) can be pulled out separately rather than regex-parsed from a sentence",
+    "example_key": "example_value"
+  },
+
+  "recommended_actions": [
+    "string — ordered list, at least one item, most important action first"
   ],
-  "confidence": 0,
-  "recommended_action": "Recommended SOC analyst action"
+
+  "ai_status": "string (optional) — 'ok' | 'unavailable', only present if this agent uses an AI enrichment step",
+  "ai_summary": "string (optional) — AI-written explanation, only if ai_status is 'ok'",
+  "ai_recommended_actions": ["string (optional) — AI-suggested actions, separate from the rule-based recommended_actions above"]
 }
