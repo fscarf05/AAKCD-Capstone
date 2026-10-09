@@ -6,10 +6,10 @@ from agents.command_control.parsers import load_events
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
-SCHEMA_FIELDS = [
-    "agent", "stage", "timestamp", "severity", "mitre_technique",
-    "mitre_name", "description", "evidence", "confidence",
-    "recommended_action",
+REQUIRED_FIELDS = [
+    "agent", "stage", "timestamp", "severity", "confidence",
+    "mitre_technique_id", "mitre_technique", "description",
+    "evidence", "recommended_actions",
 ]
 
 
@@ -18,20 +18,20 @@ def run(filename, **thresholds):
 
 
 def test_clean_beacon_is_detected():
-    findings = run("beacon_60s.log")
-    assert len(findings) == 1
-    assert "10.0.0.15" in findings[0]["description"]
-    assert "203.0.113.44" in findings[0]["description"]
+    alerts = run("beacon_60s.log")
+    assert len(alerts) == 1
+    assert alerts[0].source_ip == "10.0.0.15"
+    assert alerts[0].evidence["destination_ip"] == "203.0.113.44"
 
 
-def test_normal_browsing_produces_no_findings():
+def test_normal_browsing_produces_no_alerts():
     assert run("normal_browsing.log") == []
 
 
-def test_beacon_is_high_severity():
-    finding = run("beacon_60s.log")[0]
-    assert finding["severity"] == "High"
-    assert finding["confidence"] >= 80
+def test_beacon_is_high_severity_and_high_confidence():
+    alert = run("beacon_60s.log")[0]
+    assert alert.severity == "HIGH"
+    assert alert.confidence == "high"
 
 
 def test_too_few_connections_are_ignored():
@@ -39,32 +39,52 @@ def test_too_few_connections_are_ignored():
     assert analyse(events) == []
 
 
-def test_finding_matches_shared_schema():
-    finding = run("beacon_60s.log")[0]
-    for field in SCHEMA_FIELDS:
-        assert field in finding, f"missing schema field: {field}"
-    assert isinstance(finding["evidence"], list)
-    assert all(isinstance(item, str) for item in finding["evidence"])
-    assert finding["severity"] in ("Low", "Medium", "High", "Critical")
-    assert finding["stage"] == "Command and Control"
+def test_alert_matches_shared_schema():
+    alert = run("beacon_60s.log")[0].to_dict()
+    for field in REQUIRED_FIELDS:
+        assert field in alert, f"missing schema field: {field}"
+    assert alert["agent"] == "command_control"
+    assert alert["stage"] == "command_and_control"
+    assert alert["severity"] in ("LOW", "MEDIUM", "HIGH", "CRITICAL")
+    assert alert["confidence"] in ("low", "medium", "high")
+
+
+def test_evidence_is_a_structured_object():
+    evidence = run("beacon_60s.log")[0].evidence
+    assert isinstance(evidence, dict)
+    assert evidence["connection_count"] == 40
+    assert evidence["destination_port"] == 443
+    assert 58 <= evidence["mean_interval_seconds"] <= 62
+    assert evidence["interval_cv"] < 0.05
+
+
+def test_recommended_actions_is_an_ordered_list():
+    actions = run("beacon_60s.log")[0].recommended_actions
+    assert isinstance(actions, list)
+    assert len(actions) >= 1
+    assert all(isinstance(action, str) for action in actions)
+    assert "Isolate" in actions[0]
 
 
 def test_timestamp_is_iso_utc():
-    finding = run("beacon_60s.log")[0]
-    assert finding["timestamp"].endswith("Z")
-    assert len(finding["timestamp"]) == 20
+    alert = run("beacon_60s.log")[0]
+    assert alert.timestamp.endswith("Z")
+    assert len(alert.timestamp) == 20
 
 
-def test_https_beacon_maps_to_encrypted_channel():
-    finding = run("beacon_60s.log")[0]
-    assert finding["mitre_technique"] == "T1573"
-    assert finding["mitre_name"] == "Encrypted Channel"
+def test_mitre_mapping_is_complete():
+    alert = run("beacon_60s.log")[0]
+    assert alert.mitre_tactic_id == "TA0011"
+    assert alert.mitre_tactic == "Command and Control"
+    assert alert.mitre_technique_id == "T1573"
+    assert alert.mitre_technique == "Encrypted Channel"
 
 
-def test_evidence_reports_the_interval():
-    evidence = " ".join(run("beacon_60s.log")[0]["evidence"])
-    assert "40 connections" in evidence
-    assert "203.0.113.44:443" in evidence
+def test_unused_ai_fields_are_dropped_from_output():
+    alert = run("beacon_60s.log")[0].to_dict()
+    assert "ai_status" not in alert
+    assert "ai_summary" not in alert
+    assert "ai_recommended_actions" not in alert
 
 
 def test_jittery_beacon_missed_at_default_thresholds():
@@ -72,9 +92,9 @@ def test_jittery_beacon_missed_at_default_thresholds():
 
 
 def test_jittery_beacon_caught_when_thresholds_loosened():
-    findings = run("beacon_jittery.log", max_interval_cv=0.40)
-    assert len(findings) == 1
-    assert "198.51.100.7" in findings[0]["description"]
+    alerts = run("beacon_jittery.log", max_interval_cv=0.40)
+    assert len(alerts) == 1
+    assert alerts[0].evidence["destination_ip"] == "198.51.100.7"
 
 
 def test_loosened_thresholds_still_reject_normal_browsing():
@@ -82,16 +102,16 @@ def test_loosened_thresholds_still_reject_normal_browsing():
 
 
 def test_save_findings_writes_valid_json(tmp_path):
-    findings = run("beacon_60s.log")
-    output = save_findings(findings, tmp_path / "command_control.json")
+    alerts = run("beacon_60s.log")
+    output = save_findings(alerts, tmp_path / "command_control.json")
 
     with open(output) as handle:
         payload = json.load(handle)
 
-    assert payload["stage"] == "Command and Control"
-    assert payload["finding_count"] == 1
-    assert len(payload["findings"]) == 1
-    assert payload["findings"][0]["mitre_technique"] == "T1573"
+    assert payload["agent"] == "command_control"
+    assert payload["alert_count"] == 1
+    assert payload["alerts"][0]["mitre_technique_id"] == "T1573"
+    assert isinstance(payload["alerts"][0]["evidence"], dict)
 
 
 def test_save_findings_handles_empty_results(tmp_path):
@@ -100,5 +120,5 @@ def test_save_findings_handles_empty_results(tmp_path):
     with open(output) as handle:
         payload = json.load(handle)
 
-    assert payload["finding_count"] == 0
-    assert payload["findings"] == []
+    assert payload["alert_count"] == 0
+    assert payload["alerts"] == []
