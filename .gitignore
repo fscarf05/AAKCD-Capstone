@@ -18,7 +18,9 @@ venv/
 *.log
 logs/
 output/
+outputs/
 
 # Allows logs in tests fixtures
 !tests/fixtures/*.log 
+
 
