@@ -5,8 +5,6 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from shared.alert_schema import Alert
-
 AGENT_NAME = "command_control"
 KILL_CHAIN_STAGE = "command_and_control"
 
@@ -129,28 +127,28 @@ def build_alert(key, events, gaps, interval_cv, byte_cv, outbound, score):
             f"If unexplained, block outbound traffic to {destination}.",
         ]
 
-    return Alert(
-        agent=AGENT_NAME,
-        stage=KILL_CHAIN_STAGE,
-        severity="HIGH" if score >= HIGH_SCORE else "MEDIUM",
-        confidence=to_confidence(score),
-        mitre_tactic_id=MITRE_TACTIC_ID,
-        mitre_tactic=MITRE_TACTIC,
-        mitre_technique_id=technique_id,
-        mitre_technique=technique,
-        source_ip=source,
-        description=(
+    return {
+        "agent": AGENT_NAME,
+        "stage": KILL_CHAIN_STAGE,
+        "timestamp": datetime.fromtimestamp(
+            events[-1]["timestamp"], tz=timezone.utc
+        ).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "severity": "HIGH" if score >= HIGH_SCORE else "MEDIUM",
+        "confidence": to_confidence(score),
+        "mitre_tactic_id": MITRE_TACTIC_ID,
+        "mitre_tactic": MITRE_TACTIC,
+        "mitre_technique_id": technique_id,
+        "mitre_technique": technique,
+        "source_ip": source,
+        "description": (
             f"{source} contacted {destination}:{port} {len(events)} times at a "
             f"near-constant {mean_gap:.1f} second interval, varying by only "
             f"{interval_cv * 100:.1f} percent. Regularity of this kind indicates "
             f"an automated command and control channel rather than user activity."
         ),
-        evidence=evidence,
-        recommended_actions=actions,
-        timestamp=datetime.fromtimestamp(
-            events[-1]["timestamp"], tz=timezone.utc
-        ).strftime("%Y-%m-%dT%H:%M:%SZ"),
-    )
+        "evidence": evidence,
+        "recommended_actions": actions,
+    }
 
 
 def to_confidence(score):
@@ -168,7 +166,7 @@ def analyse(events, **thresholds):
         if alert:
             alerts.append(alert)
     alerts.sort(
-        key=lambda a: (SEVERITY_RANK[a.severity], CONFIDENCE_RANK[a.confidence]),
+        key=lambda a: (SEVERITY_RANK[a["severity"]], CONFIDENCE_RANK[a["confidence"]]),
         reverse=True,
     )
     return alerts
@@ -182,7 +180,7 @@ def save_findings(alerts, path=OUTPUT_PATH):
         "stage": KILL_CHAIN_STAGE,
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "alert_count": len(alerts),
-        "alerts": [alert.to_dict() for alert in alerts],
+        "alerts": alerts,
     }
     with open(path, "w") as handle:
         json.dump(payload, handle, indent=2)
@@ -201,7 +199,7 @@ def main():
     print(f"Analysed {len(events)} connections from {log_path}")
     print(f"{len(alerts)} alert(s) written to {output}")
     for alert in alerts:
-        print(f"  [{alert.severity}/{alert.confidence}] {alert.description}")
+        print(f"  [{alert['severity']}/{alert['confidence']}] {alert['description']}")
 
 
 if __name__ == "__main__":
