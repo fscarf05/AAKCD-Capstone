@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+.pytest_cache/
 
 # Environment variables / secrets
 .env
@@ -16,4 +17,10 @@ venv/
 # Logs and generated data
 *.log
 logs/
+output/
 outputs/
+
+# Allows logs in tests fixtures
+!tests/fixtures/*.log 
+
+
