@@ -44,7 +44,7 @@ def test_alert_matches_shared_schema():
     for field in REQUIRED_FIELDS:
         assert field in alert, f"missing schema field: {field}"
     assert alert["agent"] == "command_control"
-    assert alert["stage"] == "command_and_control"
+    assert alert["stage"] == "command_control"
     assert alert["severity"] in ("LOW", "MEDIUM", "HIGH", "CRITICAL")
     assert alert["confidence"] in ("low", "medium", "high")
 

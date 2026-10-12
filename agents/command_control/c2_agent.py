@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 AGENT_NAME = "command_control"
-KILL_CHAIN_STAGE = "command_and_control"
+KILL_CHAIN_STAGE = "command_control"
 
 OUTPUT_PATH = Path("output/command_control.json")
 
