@@ -5,17 +5,22 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-AGENT_NAME = "Command & Control Agent"
-KILL_CHAIN_STAGE = "Command and Control"
+AGENT_NAME = "command_control"
+KILL_CHAIN_STAGE = "command_control"
 
 OUTPUT_PATH = Path("output/command_control.json")
-CONFIDENCE_SCALE = 100
 
 MIN_CONNECTIONS = 8
 MAX_INTERVAL_CV = 0.20
 MAX_BYTE_CV = 0.10
 
+HIGH_SCORE = 0.80
+MEDIUM_SCORE = 0.65
+
 TRUSTED_DESTINATIONS = []
+
+MITRE_TACTIC_ID = "TA0011"
+MITRE_TACTIC = "Command and Control"
 
 MITRE_BY_PORT = {
     53: ("T1071.004", "Application Layer Protocol: DNS"),
@@ -24,6 +29,9 @@ MITRE_BY_PORT = {
     8080: ("T1071.001", "Application Layer Protocol: Web Protocols"),
 }
 MITRE_DEFAULT = ("T1071", "Application Layer Protocol")
+
+SEVERITY_RANK = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
+CONFIDENCE_RANK = {"high": 3, "medium": 2, "low": 1}
 
 
 def group_by_destination(events):
@@ -80,42 +88,44 @@ def detect_beaconing(key, events,
         score += 0.05
     score = min(score, 0.98)
 
-    return build_finding(key, events, gaps, interval_cv, byte_cv, outbound, score)
+    return build_alert(key, events, gaps, interval_cv, byte_cv, outbound, score)
 
 
-def build_finding(key, events, gaps, interval_cv, byte_cv, outbound, score):
+def build_alert(key, events, gaps, interval_cv, byte_cv, outbound, score):
     source, destination, port = key
     mean_gap = statistics.mean(gaps)
     span_minutes = (events[-1]["timestamp"] - events[0]["timestamp"]) / 60
-    technique, technique_name = MITRE_BY_PORT.get(port, MITRE_DEFAULT)
-    high_confidence = score >= 0.80
+    technique_id, technique = MITRE_BY_PORT.get(port, MITRE_DEFAULT)
 
-    evidence = [
-        f"Source host: {source}",
-        f"Destination: {destination}:{port}",
-        f"{len(events)} connections over {span_minutes:.1f} minutes",
-        f"Mean interval {mean_gap:.1f}s, varying by only {interval_cv * 100:.1f}% "
-        f"(normal user traffic varies far more)",
-    ]
-    if byte_cv is not None and byte_cv <= MAX_BYTE_CV:
-        evidence.append(
-            f"Outbound payload near constant at "
-            f"{statistics.mean(outbound):.0f} bytes per connection"
-        )
+    evidence = {
+        "destination_ip": destination,
+        "destination_port": port,
+        "connection_count": len(events),
+        "span_minutes": round(span_minutes, 1),
+        "mean_interval_seconds": round(mean_gap, 1),
+        "interval_cv": round(interval_cv, 3),
+        "mean_bytes_out": round(statistics.mean(outbound), 1),
+    }
+    if byte_cv is not None:
+        evidence["byte_cv"] = round(byte_cv, 3)
     service = events[0].get("service", "-")
     if service and service != "-":
-        evidence.append(f"Service identified as {service}")
+        evidence["service"] = service
 
-    if high_confidence:
-        action = (
-            f"Isolate {source} and block outbound traffic to {destination}. "
-            f"Review the host for persistence mechanisms."
-        )
+    if score >= HIGH_SCORE:
+        actions = [
+            f"Isolate {source} from the network.",
+            f"Block outbound traffic to {destination} at the firewall.",
+            f"Review {source} for persistence mechanisms, since an active command "
+            f"and control channel implies the installation stage already succeeded.",
+        ]
     else:
-        action = (
-            f"Investigate outbound traffic from {source} to {destination} and "
-            f"confirm whether a scheduled process accounts for it."
-        )
+        actions = [
+            f"Investigate outbound traffic from {source} to {destination}.",
+            "Confirm whether a scheduled process or update service accounts for "
+            "the regular interval.",
+            f"If unexplained, block outbound traffic to {destination}.",
+        ]
 
     return {
         "agent": AGENT_NAME,
@@ -123,44 +133,54 @@ def build_finding(key, events, gaps, interval_cv, byte_cv, outbound, score):
         "timestamp": datetime.fromtimestamp(
             events[-1]["timestamp"], tz=timezone.utc
         ).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "severity": "High" if high_confidence else "Medium",
+        "severity": "HIGH" if score >= HIGH_SCORE else "MEDIUM",
+        "confidence": to_confidence(score),
+        "mitre_tactic_id": MITRE_TACTIC_ID,
+        "mitre_tactic": MITRE_TACTIC,
+        "mitre_technique_id": technique_id,
         "mitre_technique": technique,
-        "mitre_name": technique_name,
+        "source_ip": source,
         "description": (
-            f"Host {source} is contacting {destination}:{port} at regular "
-            f"intervals, consistent with an automated command and control channel."
+            f"{source} contacted {destination}:{port} {len(events)} times at a "
+            f"near-constant {mean_gap:.1f} second interval, varying by only "
+            f"{interval_cv * 100:.1f} percent. Regularity of this kind indicates "
+            f"an automated command and control channel rather than user activity."
         ),
         "evidence": evidence,
-        "confidence": to_confidence(score),
-        "recommended_action": action,
+        "recommended_actions": actions,
     }
 
 
 def to_confidence(score):
-    if CONFIDENCE_SCALE == 100:
-        return round(score * 100)
-    return round(score, 2)
+    if score >= HIGH_SCORE:
+        return "high"
+    if score >= MEDIUM_SCORE:
+        return "medium"
+    return "low"
 
 
 def analyse(events, **thresholds):
-    findings = []
+    alerts = []
     for key, group in group_by_destination(events).items():
-        finding = detect_beaconing(key, group, **thresholds)
-        if finding:
-            findings.append(finding)
-    findings.sort(key=lambda f: f["confidence"], reverse=True)
-    return findings
+        alert = detect_beaconing(key, group, **thresholds)
+        if alert:
+            alerts.append(alert)
+    alerts.sort(
+        key=lambda a: (SEVERITY_RANK[a["severity"]], CONFIDENCE_RANK[a["confidence"]]),
+        reverse=True,
+    )
+    return alerts
 
 
-def save_findings(findings, path=OUTPUT_PATH):
+def save_findings(alerts, path=OUTPUT_PATH):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "agent": AGENT_NAME,
         "stage": KILL_CHAIN_STAGE,
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "finding_count": len(findings),
-        "findings": findings,
+        "alert_count": len(alerts),
+        "alerts": alerts,
     }
     with open(path, "w") as handle:
         json.dump(payload, handle, indent=2)
@@ -173,13 +193,13 @@ def main():
     from agents.command_control.parsers import load_events
 
     events = load_events(log_path)
-    findings = analyse(events)
-    output = save_findings(findings)
+    alerts = analyse(events)
+    output = save_findings(alerts)
 
     print(f"Analysed {len(events)} connections from {log_path}")
-    print(f"{len(findings)} finding(s) written to {output}")
-    for finding in findings:
-        print(f"  [{finding['severity']}] {finding['description']}")
+    print(f"{len(alerts)} alert(s) written to {output}")
+    for alert in alerts:
+        print(f"  [{alert['severity']}/{alert['confidence']}] {alert['description']}")
 
 
 if __name__ == "__main__":
