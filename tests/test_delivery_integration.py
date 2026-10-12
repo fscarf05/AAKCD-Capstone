@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -38,7 +38,31 @@ class DeliveryIntegrationTests(unittest.TestCase):
             self.assertNotIn('source_ip', alert.to_dict())
         alert = DeliveryAgent(False).analyse_file(ROOT / 'test_samples/invoice.exe')[0]
         self.assertNotIn('source_ip', alert.to_dict())
-        self.assertTrue(alert.evidence['source_file'].endswith('invoice.exe'))
+        self.assertTrue(alert.evidence['file_path'].endswith('invoice.exe'))
+
+    def test_exact_file_path_contract_on_rules_and_ai(self):
+        events = [
+            {'attachment': 'invoice.exe', 'file_path': '/tmp/invoice.exe'},
+            {'attachment': 'invoice.exe', 'source_file': '/tmp/invoice.exe'},
+            {'attachment': 'invoice.exe', 'file_path': r'C:\Users\Student\invoice.exe'},
+        ]
+        with patch('http.client.HTTPConnection') as connection:
+            response = connection.return_value.getresponse.return_value
+            response.status = 200
+            response.read.return_value = json.dumps({'done':True, 'response':json.dumps({
+                'suspicious':True, 'reason':'Suspicious attachment for review.',
+                'category':'attachment'})}).encode()
+            for event in events:
+                alerts = DeliveryAgent(True).analyse_event(event)
+                self.assertEqual(len(alerts), 2)
+                for alert in alerts:
+                    supplied = event.get('file_path') or event['source_file']
+                    expected = str(PureWindowsPath(supplied)) if PureWindowsPath(supplied).is_absolute() else str(Path(supplied).resolve())
+                    self.assertEqual(alert.evidence['file_path'], expected)
+                    self.assertNotIn('source_file', alert.evidence)
+                    self.assertTrue(alert.timestamp.endswith('Z'))
+            alert = DeliveryAgent(False).analyse_event({'attachment':'invoice.exe'})[0]
+            self.assertNotIn('file_path', alert.evidence)
 
     def test_demo_preserves_correlation_metadata(self):
         event = demo_event('192.0.2.10','team-demo-1')
@@ -46,6 +70,8 @@ class DeliveryIntegrationTests(unittest.TestCase):
         self.assertEqual(len(alerts), 1)
         self.assertEqual(alerts[0].source_ip, '192.0.2.10')
         self.assertEqual(alerts[0].severity, 'CRITICAL')
+        self.assertTrue(Path(alerts[0].evidence['file_path']).is_absolute())
+        self.assertEqual(Path(alerts[0].evidence['file_path']).read_bytes(), b'')
         self.assertTrue(alerts[0].evidence['simulation'])
         self.assertEqual(alerts[0].evidence['scenario_id'], 'team-demo-1')
         with self.assertRaises(ValueError):

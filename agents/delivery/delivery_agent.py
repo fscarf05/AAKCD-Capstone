@@ -402,7 +402,7 @@ class DeliveryAgent:
         # -----------------------------------------------------
 
         event = {
-            "source_file": str(path.resolve()),
+            "file_path": str(path.resolve()),
             "attachment": path.name,
         }
 

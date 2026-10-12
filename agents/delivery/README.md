@@ -72,7 +72,7 @@ rule scores 0.80–0.95 map to high, 0.75 to medium; the AI's former 0.5 placeho
 maps to low. These mappings do not demonstrate detection accuracy.
 
 Rule evidence records detector name and matched filenames/extensions, keywords or
-URL. File scans add `source_file`. Unknown or invalid source IPs are omitted;
+URL. File scans add `file_path`. Unknown or invalid source IPs are omitted;
 no address is inferred from a file. Valid event IPs are retained for correlation.
 
 When AI runs, existing rule alerts receive `ai_status=ok` and `ai_summary`, including
@@ -89,7 +89,7 @@ python3 -m agents.delivery.demo --source-ip 192.0.2.10 --scenario-id ransomware-
 ```
 
 This is a safe, labelled simulation of an unsolicited disguised attachment. It
-produces one critical rule alert without creating or running malware. Replace the
+produces one critical rule alert using an empty, inert fixture without running malware. Replace the
 example documentation IP with the source IP agreed for the team's scenario. Add
 `--with-ai` for optional analysis, which may add an alert. This command implements
 only Delivery; other stages and cross-stage correlation belong to the team demo.
@@ -117,3 +117,16 @@ Limitations: filename checks do not inspect binary payloads; text scanning is no
 a full MIME/email parser; a directory scan is a one-shot batch, not a mail gateway
 or filesystem watcher. AI can miss threats or be misled. Logs can contain filenames,
 URLs and model explanations; apply appropriate access control in deployment.
+
+## Orchestrator evidence keys
+
+File scans and the demo send `evidence.file_path` as the full attachment path.
+Legacy input `source_file` is accepted but exported as `file_path` only. Windows
+absolute paths are preserved for supplied Windows events. Filename-only or URL-only
+events omit the path when its location is unknown; do not fabricate a response target.
+Delivery timestamps use UTC with a `Z` suffix. The shared schema stays unchanged.
+
+The default demo attachment is the empty fixture at
+`wazuh/delivery/demo_files/invoice.pdf.exe`. Use `--file-path` to supply a safe fixture
+on the actual target host. A path on your Mac does not identify a file on a different
+VM: the orchestrator must resolve the collection host before taking any action.

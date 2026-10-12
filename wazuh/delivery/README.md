@@ -117,3 +117,11 @@ checks. XML parsing and local routing tests are not a substitute for wazuh-logte
 - [Log collection configuration](https://documentation.wazuh.com/current/user-manual/reference/ossec-conf/localfile.html)
 - [Testing decoders and rules](https://documentation.wazuh.com/current/user-manual/ruleset/testing.html)
 - [Rule syntax and dynamic-field correlation](https://documentation.wazuh.com/current/user-manual/ruleset/ruleset-xml-syntax/rules.html)
+
+## Orchestrator path agreement (12 October)
+
+Delivery attachment evidence uses `file_path`, exactly as requested by the team.
+The samples use illustrative absolute Linux paths; the executable demo uses the
+full path of an empty local fixture. Confirm this path exists on the intended target
+host before testing response actions. Unknown file locations are omitted, never
+inferred from the attachment name. UTC timestamps now use `Z` explicitly.

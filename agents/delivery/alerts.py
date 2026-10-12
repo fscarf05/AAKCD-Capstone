@@ -1,5 +1,7 @@
 """Delivery-specific construction of the team's shared alerts."""
 from ipaddress import ip_address
+from datetime import datetime, timezone
+from pathlib import Path, PureWindowsPath
 
 from shared.alert_schema import Alert
 
@@ -29,11 +31,21 @@ def source_ip(value):
 
 def make_alert(*, severity, description, technique, confidence, event, evidence):
     evidence = dict(evidence)
-    for key in ('source_file', 'scenario_id', 'simulation'):
+    # Preserve Windows paths for events supplied by Windows teammates.
+    # Filename-only events do not establish where a file actually resides.
+    file_path = event.get('file_path') or event.get('source_file')
+    if file_path:
+        if not isinstance(file_path, str):
+            raise ValueError('file_path must be a string')
+        evidence['file_path'] = (str(PureWindowsPath(file_path))
+                                 if PureWindowsPath(file_path).is_absolute()
+                                 else str(Path(file_path).expanduser().resolve()))
+    for key in ('scenario_id', 'simulation'):
         if key in event:
             evidence[key] = event[key]
     return Alert(
         agent='delivery', stage='delivery', severity=severity,
+        timestamp=datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
         confidence=confidence, description=description,
         mitre_technique_id=technique, mitre_technique=TECHNIQUES[technique],
         source_ip=source_ip(event.get('source_ip')),
