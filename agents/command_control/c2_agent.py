@@ -159,7 +159,7 @@ def to_confidence(score):
     return "low"
 
 
-def analyse(events, **thresholds):
+def analyse(events, use_ai=False, ai_client=None, **thresholds):
     alerts = []
     for key, group in group_by_destination(events).items():
         alert = detect_beaconing(key, group, **thresholds)
@@ -169,6 +169,9 @@ def analyse(events, **thresholds):
         key=lambda a: (SEVERITY_RANK[a["severity"]], CONFIDENCE_RANK[a["confidence"]]),
         reverse=True,
     )
+    if use_ai and alerts:
+        from agents.command_control.enrichment import enrich_all
+        enrich_all(alerts, ai_client)
     return alerts
 
 
@@ -188,18 +191,24 @@ def save_findings(alerts, path=OUTPUT_PATH):
 
 
 def main():
-    log_path = sys.argv[1] if len(sys.argv) > 1 else "tests/fixtures/beacon_60s.log"
+    args = [arg for arg in sys.argv[1:] if arg != "--ai"]
+    use_ai = "--ai" in sys.argv[1:]
+    log_path = args[0] if args else "tests/fixtures/beacon_60s.log"
 
     from agents.command_control.parsers import load_events
 
     events = load_events(log_path)
-    alerts = analyse(events)
+    alerts = analyse(events, use_ai=use_ai)
     output = save_findings(alerts)
 
     print(f"Analysed {len(events)} connections from {log_path}")
     print(f"{len(alerts)} alert(s) written to {output}")
     for alert in alerts:
         print(f"  [{alert['severity']}/{alert['confidence']}] {alert['description']}")
+        if alert.get("ai_status") == "ok":
+            print(f"      AI: {alert['ai_summary']}")
+        elif alert.get("ai_status") == "unavailable":
+            print("      AI enrichment unavailable, rule-based output only")
 
 
 if __name__ == "__main__":
